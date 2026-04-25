@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
-import { fetchTransactions, fetchUser, initiateTransaction, resetMock } from './api'
+import { fetchTransactions, fetchUser, initiateTransaction, previewRisk, resetMock } from './api'
 import PhoneFrame from './components/PhoneFrame'
 import HomeScreen from './components/HomeScreen'
 import VerifyingScreen from './components/VerifyingScreen'
@@ -147,6 +147,21 @@ export default function App() {
     await loadData()
   }, [verify, loadData])
 
+  const handleCheckRisk = useCallback(async (merchant: string, amount: number) => {
+    // Preview-only: scores against current history without persisting. Repeated
+    // clicks won't pollute the embedding cache — the user can iterate freely.
+    setIsLoading(true)
+    try {
+      const res = await previewRisk(merchant, amount)
+      setIsLoading(false)
+      return res.tier
+    } catch (e) {
+      setIsLoading(false)
+      alert(`Error: ${String(e)}`)
+      return 'UNKNOWN'
+    }
+  }, [])
+
   // Autopilot Engine
   useEffect(() => {
     if (!isAutopilot || autopilotRunning.current) return
@@ -239,7 +254,7 @@ export default function App() {
         </PhoneFrame>
 
         {!isAutopilot && (
-          <DemoControls onDemoPress={handleDemoButton} isLoading={isLoading} />
+          <DemoControls onDemoPress={handleDemoButton} onCheckRisk={handleCheckRisk} isLoading={isLoading} />
         )}
       </div>
     </div>

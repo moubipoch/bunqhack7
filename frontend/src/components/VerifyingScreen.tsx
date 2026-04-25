@@ -209,38 +209,36 @@ export default function VerifyingScreen({
 
       {/* Analysis panels */}
       <div className="flex-1 overflow-y-auto px-5 pb-8 space-y-4 z-10 custom-scrollbar mt-2">
-        {/* Hume bars */}
-        <div className="bg-white/5 border border-white/10 rounded-[24px] p-5 backdrop-blur-md relative overflow-hidden">
+        {/* Audio Reactive Widget */}
+        <div className="bg-white/5 border border-white/10 rounded-[24px] p-5 backdrop-blur-md relative overflow-hidden flex flex-col items-center justify-center min-h-[140px]">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-          <div className="flex items-center gap-2 mb-4">
-            <Activity size={16} className="text-gray-400" />
-            <p className="text-[11px] font-bold text-gray-300 uppercase tracking-widest">
-              Biometric Telemetry
+          
+          <div className="flex items-center gap-2 mb-6 self-start w-full">
+            <Activity size={16} className="text-indigo-400" />
+            <p className="text-[11px] font-bold text-indigo-300 uppercase tracking-widest">
+              Live Voice Telemetry
             </p>
           </div>
-          
-          <div className="space-y-3.5">
-            {BARS.map(({ key, label, color, barGlow }) => {
-              const pct = humeScores ? Math.round(humeScores[key] * 100) : 0
-              return (
-                <div key={key} className="flex items-center gap-3">
-                  <span className="text-[12px] font-bold text-gray-400 w-14 flex-none uppercase tracking-wide">{label}</span>
-                  <div className="flex-1 h-2 bg-black/50 rounded-full overflow-hidden border border-white/5 relative">
-                    <div
-                      className={`absolute top-0 left-0 h-full rounded-full transition-all duration-700 ease-out ${color} ${barGlow}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-[12px] font-mono font-bold text-gray-300 w-9 text-right flex-none">
-                    {humeScores ? `${pct}%` : '–'}
-                  </span>
-                </div>
-              )
-            })}
+
+          <div className="flex items-center justify-center gap-1.5 h-16 w-full">
+            {[...Array(24)].map((_, i) => (
+              <div
+                key={i}
+                className="w-1.5 bg-indigo-500 rounded-full"
+                style={{
+                  height: '100%',
+                  opacity: audioSource === 'mic' && !isProcessing ? 0.8 : 0.2,
+                  animation: audioSource === 'mic' && !isProcessing ? `waveform ${0.3 + Math.random() * 0.4}s infinite alternate ease-in-out` : 'none',
+                  animationDelay: `${Math.random()}s`,
+                  transformOrigin: 'bottom',
+                  transform: audioSource === 'mic' && !isProcessing ? 'scaleY(0.2)' : 'scaleY(0.1)',
+                }}
+              />
+            ))}
           </div>
           
           {humeScores && (
-            <div className={`mt-5 pt-3 border-t border-white/10 flex items-start gap-2
+            <div className={`mt-5 pt-3 border-t border-white/10 flex items-start gap-2 w-full
               ${humeScores.verdict_hint === 'CLEAN' ? 'text-emerald-400' :
                 humeScores.verdict_hint === 'FLAGGED' ? 'text-red-400' :
                 'text-amber-400'}`}>

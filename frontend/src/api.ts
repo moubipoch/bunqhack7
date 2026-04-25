@@ -42,3 +42,26 @@ export async function initiateTransaction(
 export async function resetMock(): Promise<void> {
   await fetch(`${base()}/api/mock/reset`, { method: 'POST' })
 }
+
+export interface RiskPreview {
+  tier: 'NO_RISK' | 'MID_RISK' | 'HIGH_RISK'
+  merchant_reputation: 'GOOD' | 'BAD' | 'UNKNOWN'
+  risk: number | null
+  n_emb: number | null
+  n_amt: number | null
+  n_time: number | null
+  p_merch: number | null
+  descriptor: string | null
+  cold_start: boolean
+}
+
+// Score a transaction WITHOUT persisting it. Use for the "check risk" button.
+export async function previewRisk(merchant: string, amountEur: number): Promise<RiskPreview> {
+  const res = await fetch(`${base()}/api/risk/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ merchant, amount_eur: amountEur }),
+  })
+  if (!res.ok) throw new Error(`POST /api/risk/preview failed: ${res.status}`)
+  return res.json() as Promise<RiskPreview>
+}

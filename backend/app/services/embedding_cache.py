@@ -131,9 +131,19 @@ async def initialize() -> None:
 
 
 def history_dicts() -> list[dict[str, Any]]:
-    """Return all cached history transactions as dicts (for descriptor + scoring)."""
+    """Return APPROVED transactions as dicts (for descriptor + scoring).
+
+    Filtering by status=APPROVED is intentional: the user's behavioral
+    baseline shouldn't include in-flight verifications (PENDING_VERIFICATION)
+    or held/frozen txs. Otherwise scoring a flagged transaction would dilute
+    its own novelty signal once the row lands in the DB.
+    """
     with SessionLocal() as db:
-        txs = list(db.scalars(select(Transaction).order_by(Transaction.created_at.asc())))
+        txs = list(db.scalars(
+            select(Transaction)
+            .where(Transaction.status == "APPROVED")
+            .order_by(Transaction.created_at.asc())
+        ))
     return [_tx_dict(t) for t in txs]
 
 

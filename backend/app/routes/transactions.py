@@ -3,16 +3,57 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import AuditLog, Transaction, Verification
-from ..schemas import TransactionInitiateReq, TransactionInitiateRes, Verdict
+from ..schemas import MerchantReputation, Tier, TransactionInitiateReq, TransactionInitiateRes, Verdict
 from ..services import embedding_cache, merchant_check, mock_bunq, risk_scorer
 from ..util import new_id
 
 router = APIRouter()
+
+
+class RiskPreviewReq(BaseModel):
+    amount_eur: float = Field(gt=0)
+    merchant: str
+
+
+class RiskPreviewRes(BaseModel):
+    tier: Tier
+    merchant_reputation: MerchantReputation
+    risk: float | None = None
+    n_emb: float | None = None
+    n_amt: float | None = None
+    n_time: float | None = None
+    p_merch: float | None = None
+    descriptor: str | None = None
+    cold_start: bool = False
+
+
+@router.post("/risk/preview", response_model=RiskPreviewRes)
+async def preview_risk(req: RiskPreviewReq) -> RiskPreviewRes:
+    """Score a transaction WITHOUT persisting it or adding to the embedding cache.
+
+    Use this from the demo's 'Check risk' button — repeated calls won't pollute
+    the user's history baseline (which would otherwise wash out novelty signals).
+    """
+    tier, scores = await risk_scorer.classify_async(req.amount_eur, req.merchant)
+    reputation = merchant_check.lookup(req.merchant)
+    if scores is None:
+        return RiskPreviewRes(tier=tier, merchant_reputation=reputation, cold_start=True)
+    return RiskPreviewRes(
+        tier=tier,
+        merchant_reputation=reputation,
+        risk=scores["risk"],
+        n_emb=scores["n_emb"],
+        n_amt=scores["n_amt"],
+        n_time=scores["n_time"],
+        p_merch=scores["p_merch"],
+        descriptor=scores["descriptor"],
+    )
 
 
 @router.get("/user")
@@ -93,19 +134,12 @@ async def initiate(req: TransactionInitiateReq, db: Session = Depends(get_db)) -
         db.add(audit)
         db.commit()
 
-        # Cache the new embedding so future scores see it.
-        try:
-            await embedding_cache.add_transaction(
-                {
-                    "id": tx_id,
-                    "merchant": req.merchant,
-                    "amount_eur": req.amount_eur,
-                    "timestamp": now,
-                    "category": embedding_cache._infer_category(req.merchant),
-                }
-            )
-        except Exception:  # noqa: BLE001 — embedding miss must not fail the tx
-            pass
+        # NOTE: deliberately do NOT add this auto-approved tx to the embedding
+        # cache. Demo runs would otherwise pollute the history with whatever
+        # the user keeps tapping (€9k purchases at "Apples Store" mid-demo
+        # eventually drown out the novelty signal). The seed history is the
+        # baseline; real production would refresh embeddings on a slower
+        # cadence (nightly batch) anyway.
 
         return TransactionInitiateRes(
             transaction_id=tx_id,
