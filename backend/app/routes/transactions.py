@@ -3,15 +3,44 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import AuditLog, Transaction, Verification
 from ..schemas import TransactionInitiateReq, TransactionInitiateRes, Verdict
-from ..services import merchant_check, risk_scorer
+from ..services import merchant_check, mock_bunq, risk_scorer
 from ..util import new_id
 
 router = APIRouter()
+
+
+@router.get("/user")
+def get_user() -> dict:
+    u = mock_bunq.get_user()
+    return {"id": u.id, "name": u.name, "balance_eur": u.balance_eur}
+
+
+@router.get("/transactions")
+def list_transactions(db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.scalars(
+        select(Transaction)
+        .where(Transaction.user_id == mock_bunq.DEMO_USER_ID)
+        .order_by(Transaction.created_at.desc())
+        .limit(20)
+    ).all()
+    return [
+        {
+            "id": t.id,
+            "amount_eur": t.amount_eur,
+            "merchant": t.merchant,
+            "status": t.status,
+            "tier": t.tier,
+            "merchant_reputation": t.merchant_reputation,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in rows
+    ]
 
 
 @router.post("/transaction/initiate", response_model=TransactionInitiateRes)
