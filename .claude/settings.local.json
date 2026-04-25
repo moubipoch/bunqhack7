@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk -F= '{ if \\(length\\($2\\) == 0\\) print $1 \": EMPTY\"; else print $1 \": set \\(\" length\\($2\\) \" chars\\)\" }')"
+    ]
+  }
+}

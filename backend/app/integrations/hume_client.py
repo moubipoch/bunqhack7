@@ -35,22 +35,45 @@ async def score_audio(pcm_bytes: bytes) -> HumeScores:
 async def _score_real(pcm_bytes: bytes) -> HumeScores:
     """Submit a combined PCM16 16kHz mono buffer to Hume and normalize the result.
 
-    Hume returns per-emotion scores (48+ categories). We collapse the most
-    relevant prosody dimensions into calmness / fear / distress / anxiety.
+    Hume's streaming Expression Measurement API expects WAV/WebM/MP3/MP4 — not
+    raw PCM — so we wrap the buffer in a WAV envelope before submitting. Hume
+    returns per-emotion scores (48 prosody categories); we collapse the most
+    relevant dimensions into calmness / fear / distress / anxiety.
     """
+    import io
+    import tempfile
+    import wave
+    from pathlib import Path
+
     from hume import AsyncHumeClient
     from hume.expression_measurement.stream import Config
-    from hume.expression_measurement.stream.socket_client import StreamConnectOptions
+
+    # Wrap PCM16 16kHz mono into a WAV (Hume v0.13.11 send_file accepts a path).
+    wav_buf = io.BytesIO()
+    with wave.open(wav_buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(pcm_bytes)
+    wav_bytes = wav_buf.getvalue()
 
     client = AsyncHumeClient(api_key=settings.hume_api_key)
-    options = StreamConnectOptions(config=Config(prosody={}))
-
     aggregate: dict[str, list[float]] = {}
-    async with client.expression_measurement.stream.connect(options=options) as socket:
-        result = await socket.send_bytes(pcm_bytes)
-        for prediction in getattr(result, "prosody", {}).get("predictions", []) or []:
-            for emotion in prediction.get("emotions", []):
-                aggregate.setdefault(emotion["name"], []).append(emotion["score"])
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(wav_bytes)
+        tmp_path = Path(tmp.name)
+    try:
+        async with client.expression_measurement.stream.connect() as socket:
+            result = await socket.send_file(tmp_path, config=Config(prosody={}))
+
+        prosody = getattr(result, "prosody", None)
+        predictions = getattr(prosody, "predictions", None) or [] if prosody else []
+        for prediction in predictions:
+            for emotion in prediction.emotions or []:
+                aggregate.setdefault(emotion.name, []).append(emotion.score)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
     def avg(name: str) -> float:
         values = aggregate.get(name, [])
