@@ -1,3 +1,4 @@
 *.bundle
 *.patch
 **/node_modules/
+frontend/dist/

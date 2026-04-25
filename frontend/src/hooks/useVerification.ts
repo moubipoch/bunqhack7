@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { getSessionId } from '../api'
 import { useAudioCapture, type AudioSource } from './useAudioCapture'
 import type {
   GeminiSummary,
@@ -130,11 +131,14 @@ export function useVerification() {
           }
         }
 
-        // Open WS
+        // Open WS — append ?sid=... so the backend can bind the same per-tab
+        // session it sees on HTTP requests (WS routes bypass HTTP middleware).
         const apiBase =
           (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://localhost:8000'
         const wsBase = apiBase.replace(/^http/, 'ws')
-        const ws = new WebSocket(`${wsBase}${initiateRes.ws_url}`)
+        const sid = encodeURIComponent(getSessionId())
+        const sep = (initiateRes.ws_url ?? '').includes('?') ? '&' : '?'
+        const ws = new WebSocket(`${wsBase}${initiateRes.ws_url}${sep}sid=${sid}`)
         wsRef.current = ws
 
         let questions: VerificationQuestion[] = []
